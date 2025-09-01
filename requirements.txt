@@ -1,0 +1,24 @@
+# UI Framework
+PyQt6
+
+# Chess Logic and Engines
+chess
+einops
+gdown
+numpy
+pandas
+pyzstd
+torch
+tqdm
+scikit-learn
+onnxruntime
+
+# Image Processing and Capture
+opencv-python
+mss
+Pillow
+pyclipper
+matplotlib
+
+# Utilities
+pyyaml
