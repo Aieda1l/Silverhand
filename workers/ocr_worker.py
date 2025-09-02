@@ -7,8 +7,8 @@ class OCRWorker(QThread):
     A dedicated worker thread for running the chessboard OCR process.
     This prevents the GUI from freezing during analysis.
     """
-    # Signal arguments: FEN string (str), cropped board image path (str)
-    finished = pyqtSignal(str, str)
+    # Signal arguments: bbox list, FEN string (str), cropped board image path (str)
+    finished = pyqtSignal(object, str, str)
 
     # Signal arguments: error message (str)
     error = pyqtSignal(str)
@@ -30,11 +30,11 @@ class OCRWorker(QThread):
         try:
             self.progress.emit("Detecting and analyzing board...")
 
-            fen, cropped_path = self.ocr_manager.analyze_board(self.image_path)
+            bbox, fen, cropped_path = self.ocr_manager.analyze_board(self.image_path)
 
             if fen and cropped_path:
                 self.progress.emit(f"Board found. FEN: {fen}")
-                self.finished.emit(fen, cropped_path)
+                self.finished.emit(bbox, fen, cropped_path)
             else:
                 self.error.emit("Could not detect a chessboard in the image.")
 

@@ -1,5 +1,8 @@
+import shutil
 import sys
 import os
+from pathlib import Path
+
 import requests
 from tqdm import tqdm
 from PIL import Image
@@ -79,7 +82,7 @@ class OCRManager:
                 # ... (error handling remains the same)
                 raise ConnectionError("Failed to download the required lc2fen model.")
 
-    def analyze_board(self, image_path: str) -> tuple[str | None, str | None]:
+    def analyze_board(self, image_path: str) -> tuple[list, str | None, str | None]:
         """
         Analyzes the given image using the configured OCR engine.
 
@@ -96,7 +99,7 @@ class OCRManager:
         else:  # self.mode == 'physical'
             return self._analyze_physical(image_path)
 
-    def _analyze_digital(self, image_path: str) -> tuple[str | None, str | None]:
+    def _analyze_digital(self, image_path: str) -> tuple[list, str | None, str | None]:
         """Uses the chess_detector library for digital boards."""
         try:
             results = self.detector.process_image(image_path, confidence_threshold=0.6)
@@ -113,7 +116,7 @@ class OCRManager:
             cropped_image = image.crop(box)
             cropped_image.save(CROPPED_BOARD_PATH)
 
-            return fen, str(CROPPED_BOARD_PATH)
+            return box, fen, str(CROPPED_BOARD_PATH)
 
         except Exception as e:
             print(f"An error occurred during digital OCR processing: {e}")
@@ -121,7 +124,7 @@ class OCRManager:
             traceback.print_exc()
             return None, None
 
-    def _analyze_physical(self, image_path: str) -> tuple[str | None, str | None]:
+    def _analyze_physical(self, image_path: str) -> tuple[str | None, str | None, str | None]:
         """Uses the lc2fen library for physical boards."""
         try:
             predicted_fen, board_found = predict_board_onnx(
@@ -135,9 +138,9 @@ class OCRManager:
             )
 
             if board_found and predicted_fen:
-                return predicted_fen, str(CROPPED_BOARD_PATH)
+                return None, predicted_fen, str(CROPPED_BOARD_PATH)
             else:
-                return None, None
+                return None, None, None
 
         except Exception as e:
             print(f"An error occurred during physical OCR processing: {e}")

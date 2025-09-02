@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QSlider, QFrame, QApplication, QSizePolicy, QCheckBox, QComboBox
 )
 from PyQt6.QtGui import QPixmap, QColor, QFont, QIcon
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QSize, QTimer, QRect
 
 from config import (
     APP_NAME, WINDOW_WIDTH, WINDOW_HEIGHT, ELO_MIN, ELO_MAX, ELO_STEP,
@@ -13,6 +13,7 @@ from config import (
     REALTIME_ANALYSIS_INTERVAL_MS, AVAILABLE_MODELS, DEFAULT_MODEL
 )
 from ui.chessboard import ChessboardWidget
+from ui.screen_overlay import ScreenOverlay
 from core.image_capture import ScreenshotManager
 from core.ocr import OCRManager
 from core.engine import EngineManager
@@ -33,8 +34,9 @@ class MainWindow(QMainWindow):
 
         # --- State ---
         self.current_fen = None
-        self.last_screenshot_path = None  # Store the path of the last successful screenshot
+        self.last_screenshot_path = None
         self.monitored_screen_geometry = None
+        self.board_bbox_on_screen = None
         self.ocr_worker = None
         self.engine_worker = None
 
@@ -52,6 +54,8 @@ class MainWindow(QMainWindow):
 
         self.realtime_timer = QTimer(self)
         self.realtime_timer.setInterval(REALTIME_ANALYSIS_INTERVAL_MS)
+
+        self.screen_overlay = ScreenOverlay()
 
         # --- UI Widgets ---
         self._init_ui()
@@ -86,10 +90,8 @@ class MainWindow(QMainWindow):
         self.screenshot_button = QPushButton("Capture Digital Board")
         self.webcam_button = QPushButton("Capture Physical Board")
         self.realtime_toggle = QCheckBox("Real-time Analysis (Digital)")
-        self.realtime_toggle.setToolTip(
-            "When enabled, automatically re-scans the last captured\n"
-            "monitor for board changes and updates the analysis."
-        )
+        self.draw_on_screen_toggle = QCheckBox("Draw Highlights on Screen")
+        self.draw_on_screen_toggle.setToolTip("Shows move suggestions directly over the chessboard on your screen.")
 
         settings_label = QLabel("Settings")
         settings_label.setObjectName("GroupLabel")
@@ -125,12 +127,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.webcam_button)
         layout.addSpacing(10)
         layout.addWidget(self.realtime_toggle)
+        layout.addWidget(self.draw_on_screen_toggle)
         layout.addSpacing(20)
-
-        layout.addWidget(settings_label)  # Add new settings section
+        layout.addWidget(settings_label)
         layout.addLayout(color_layout)
         layout.addLayout(model_layout)
-
         layout.addSpacing(20)
         layout.addWidget(elo_group_label)
         layout.addWidget(self.elo_slider)
@@ -168,6 +169,7 @@ class MainWindow(QMainWindow):
         self.realtime_timer.timeout.connect(self.run_realtime_check)
         self.color_combo.currentTextChanged.connect(self.rerun_analysis_if_board_present)
         self.model_combo.currentTextChanged.connect(self.switch_engine_model)
+        self.draw_on_screen_toggle.toggled.connect(self.handle_draw_on_screen_toggle)
 
     def switch_engine_model(self, model_name: str):
         """Tells the engine manager to switch the active model."""
@@ -224,15 +226,28 @@ class MainWindow(QMainWindow):
         self.ocr_worker.finished.connect(self.on_ocr_finished)
         self.ocr_worker.start()
 
-    def on_ocr_finished(self, fen, cropped_image_path):
-        """Handles results from OCR, checking if the board has changed."""
+    def on_ocr_finished(self, bbox, fen, cropped_image_path):
+        if bbox:
+            monitor_x = self.monitored_screen_geometry.x()
+            monitor_y = self.monitored_screen_geometry.y()
+
+            self.board_bbox_on_screen = QRect(
+                monitor_x + bbox[0],
+                monitor_y + bbox[1],
+                bbox[2] - bbox[0],
+                bbox[3] - bbox[1]
+            )
+        else:
+            self.board_bbox_on_screen = None
+            if self.draw_on_screen_toggle.isChecked():
+                self.draw_on_screen_toggle.setChecked(False)
+
         if fen == self.current_fen:
             self.update_status("Board state is unchanged.", timeout=2000)
             return
 
         self.clear_analysis_results()
         self.board_widget.clear_highlights()
-
         self.current_fen = fen
         self.board_widget.set_fen(fen)
         self.rerun_analysis_if_board_present()
@@ -264,6 +279,7 @@ class MainWindow(QMainWindow):
         self.board_widget.clear_highlights()
         top_moves = list(move_probs.items())
 
+        highlights_to_draw = {}
         for i, label in enumerate(self.top_moves_labels):
             if i < len(top_moves):
                 move_uci, prob = top_moves[i]
@@ -271,22 +287,38 @@ class MainWindow(QMainWindow):
 
                 move = chess.Move.from_uci(move_uci)
 
-                # *** MODIFIED: Use priority for highlighting ***
-                if i == 0:  # Best move
-                    color = QColor(SQUARE_COLORS['highlight_best'])
-                    priority = 1  # Higher priority
-                else:  # Alternate moves
-                    color = QColor(SQUARE_COLORS['highlight_alt'])
-                    priority = 0  # Lower priority
+                priority = 1 if i == 0 else 0
+                color = QColor(SQUARE_COLORS['highlight_best' if priority == 1 else 'highlight_alt'])
+                self.board_widget.highlight_move(move, color, priority)
 
                 self.board_widget.highlight_move(move, color, priority)
+                highlights_to_draw[move.from_square] = (color, priority)
+                highlights_to_draw[move.to_square] = (color, priority)
             else:
                 label.setText(f"{i + 1}. --")
+
+        if self.draw_on_screen_toggle.isChecked():
+            self.screen_overlay.update_drawing_data(self.board_bbox_on_screen, self.board_widget._highlights)
+
+    def handle_draw_on_screen_toggle(self, checked):
+        """Shows or hides the screen overlay."""
+        if checked:
+            if self.board_bbox_on_screen:
+                self.screen_overlay.update_drawing_data(self.board_bbox_on_screen, self.board_widget._highlights)
+                self.screen_overlay.show()
+            else:
+                self.update_status("Capture a board first to enable on-screen drawing.", is_error=True)
+                self.draw_on_screen_toggle.setChecked(False)
+        else:
+            self.screen_overlay.hide()
 
     def clear_analysis_results(self):
         self.win_prob_label.setText("Win Probability: --%")
         for i, label in enumerate(self.top_moves_labels):
             label.setText(f"{i + 1}. --")
+
+        if self.screen_overlay:
+            self.screen_overlay.clear_drawing()
 
     def handle_realtime_toggle(self, checked):
         """Manages the start and stop of the real-time analysis timer."""
@@ -317,6 +349,11 @@ class MainWindow(QMainWindow):
         image_path = self.screenshot_manager.capture_screen_area(self.monitored_screen_geometry)
         if image_path:
             self.start_ocr_process(image_path, ocr_mode='digital')
+
+    def closeEvent(self, event):
+        """Ensure the overlay is closed when the main window closes."""
+        self.screen_overlay.close()
+        super().closeEvent(event)
 
 
 def _get_stylesheet():

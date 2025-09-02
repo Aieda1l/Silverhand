@@ -64,9 +64,9 @@ BOARD_SIZE = 560  # Pixel dimensions of the chessboard widget
 SQUARE_COLORS = {
     "light": "#F0D9B5",
     "dark": "#B58863",
-    "highlight_best": QColor(20, 255, 20, 155), # Green for best move
-    "highlight_alt": QColor(20, 20, 255, 155),   # Blue for alternate moves
-    "highlight_last": QColor(255, 255, 0, 155) # Yellow for last move made (by OCR)
+    "highlight_best": QColor(20, 255, 20, 115), # Green for best move
+    "highlight_alt": QColor(20, 20, 255, 115),   # Blue for alternate moves
+    "highlight_last": QColor(255, 255, 0, 115) # Yellow for last move made (by OCR)
 }
 
 
