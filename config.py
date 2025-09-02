@@ -13,6 +13,10 @@ LC2FEN_DIR = VENDOR_DIR / "lc2fen"
 MAIA2_MODELS_DIR = VENDOR_DIR / "maia2" / "maia2_models"
 LC2FEN_MODELS_DIR = LC2FEN_DIR / "data" / "models"
 TEMP_DIR = BASE_DIR / "temp"
+CHESS_DETECTOR_DIR = VENDOR_DIR / "chess_detector"
+CHESS_DETECTOR_MODELS_DIR = CHESS_DETECTOR_DIR / "models"
+DETECTION_MODEL_PATH = CHESS_DETECTOR_MODELS_DIR / "detection_model.pt"
+CLASSIFICATION_MODEL_PATH = CHESS_DETECTOR_MODELS_DIR / "classification_model.h5"
 
 # Ensure temporary directory exists
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -33,6 +37,8 @@ ELO_MIN = 1100
 ELO_MAX = 2500
 ELO_STEP = 100  # The slider will move in increments of 100 ELO.
 ELO_DEFAULT = 1800
+AVAILABLE_MODELS = ["rapid", "blitz"]
+DEFAULT_MODEL = "rapid"
 
 
 # --- Chessboard OCR (LiveChess2FEN) Settings ---
@@ -46,6 +52,11 @@ LC2FEN_IMG_SIZE = 224
 # Common for online chess platforms like lichess.org and chess.com.
 # Options: "BL" (Bottom-Left), "BR" (Bottom-Right), "TL" (Top-Left), "TR" (Top-Right)
 A1_POSITION = "BL"
+
+
+# --- Real-time Analysis Settings ---
+# The toggle will control this mode. The value is the refresh rate in milliseconds.
+REALTIME_ANALYSIS_INTERVAL_MS = 1000 # Check for board changes every 2 seconds.
 
 
 # --- UI and Chessboard Appearance ---

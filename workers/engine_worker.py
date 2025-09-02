@@ -16,13 +16,14 @@ class EngineWorker(QThread):
     # Signal to indicate progress
     progress = pyqtSignal(str)
 
-    def __init__(self, fen: str, elo: int, engine_manager: EngineManager):
+    def __init__(self, fen: str, elo: int, engine_manager: EngineManager, player_color: str):
         super().__init__()
         if not fen:
             raise ValueError("FEN string cannot be None for EngineWorker.")
         self.fen = fen
         self.elo = elo
         self.engine_manager = engine_manager
+        self.player_color = player_color
 
     def run(self):
         """
@@ -31,7 +32,7 @@ class EngineWorker(QThread):
         try:
             self.progress.emit(f"Analyzing position at {self.elo} ELO...")
 
-            predictions = self.engine_manager.get_move_predictions(self.fen, self.elo)
+            predictions = self.engine_manager.get_move_predictions(self.fen, self.elo, self.player_color)
 
             if predictions and predictions.get("move_probabilities"):
                 self.progress.emit("Analysis complete. Found best moves.")

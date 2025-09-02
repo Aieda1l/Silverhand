@@ -1,6 +1,6 @@
 import mss
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QDialog
-from PyQt6.QtCore import Qt, QRect, QPoint
+from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QPainter, QPen, QColor, QGuiApplication
 
 
@@ -14,22 +14,41 @@ class ScreenshotManager:
         self.output_path = str(output_path)
         self.overlay = None
 
-    def take_screenshot(self):
+    def select_monitor_and_capture(self) -> tuple[str | None, QRect | None]:
         """
-        Initiates the screenshot process by showing the overlay.
-        Returns the path to the saved screenshot or None if canceled.
+        Shows an overlay for the user to select a monitor and captures it.
+
+        Returns:
+            A tuple containing:
+            - The path to the saved screenshot or None if canceled.
+            - The QRect geometry of the captured monitor or None.
         """
         self.overlay = ScreenshotOverlay()
         if self.overlay.exec() == QDialog.DialogCode.Accepted:
-            monitor_number = self.overlay.selected_monitor_number
-            if monitor_number is not None:
-                with mss.mss() as sct:
-                    # sct.monitors[0] is all monitors, [1] is primary, etc.
-                    monitor = sct.monitors[monitor_number]
-                    sct_img = sct.grab(monitor)
-                    mss.tools.to_png(sct_img.rgb, sct_img.size, output=self.output_path)
-                return self.output_path
-        return None
+            monitor_geometry = self.overlay.selected_monitor_geometry
+            if monitor_geometry:
+                self.capture_screen_area(monitor_geometry)
+                return self.output_path, monitor_geometry
+        return None, None
+
+    def capture_screen_area(self, geometry: QRect):
+        """
+        Captures a specific rectangular area of the screen.
+
+        Args:
+            geometry (QRect): The geometry of the monitor to capture.
+        """
+        with mss.mss() as sct:
+            # Define the capture region based on the monitor's geometry
+            monitor_details = {
+                "top": geometry.top(),
+                "left": geometry.left(),
+                "width": geometry.width(),
+                "height": geometry.height(),
+            }
+            sct_img = sct.grab(monitor_details)
+            mss.tools.to_png(sct_img.rgb, sct_img.size, output=self.output_path)
+        return self.output_path
 
 
 class ScreenshotOverlay(QWidget):
@@ -46,21 +65,20 @@ class ScreenshotOverlay(QWidget):
         self.screens = QGuiApplication.screens()
         self.monitor_rects = [screen.geometry() for screen in self.screens]
 
-        # We need to find the bounding box of all monitors combined to set the overlay geometry
         total_geometry = QRect()
         for rect in self.monitor_rects:
             total_geometry = total_geometry.united(rect)
         self.setGeometry(total_geometry)
 
         self.hover_monitor_index = -1
-        self.selected_monitor_number = None
+        self.selected_monitor_geometry = None
 
         self._info_label = QLabel(
             "Click on a monitor to capture it. Press Esc to cancel.", self
         )
         self._setup_info_label()
 
-        self.setMouseTracking(True)  # Enable mouseMoveEvent even without button press
+        self.setMouseTracking(True)
 
     def _setup_info_label(self):
         self._info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -72,7 +90,6 @@ class ScreenshotOverlay(QWidget):
             border-radius: 5px;
         """)
         self._info_label.adjustSize()
-        # Center the label on the primary screen, not the total geometry
         primary_screen_geo = QGuiApplication.primaryScreen().geometry()
         self._info_label.move(
             int(primary_screen_geo.x() + (primary_screen_geo.width() - self._info_label.width()) / 2),
@@ -83,22 +100,16 @@ class ScreenshotOverlay(QWidget):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # Draw the semi-transparent overlay over the entire virtual desktop
         painter.fillRect(self.rect(), QColor(100, 100, 100, 100))
 
-        # Draw a border around each monitor
         for i, rect in enumerate(self.monitor_rects):
-            # Adjust rect to be relative to the overlay widget's position
             relative_rect = rect.translated(-self.geometry().topLeft())
-
             if i == self.hover_monitor_index:
                 pen = QPen(QColor(30, 200, 30, 255), 4, Qt.PenStyle.SolidLine)
                 painter.setBrush(QColor(30, 200, 30, 70))
             else:
                 pen = QPen(QColor(200, 200, 200, 150), 2, Qt.PenStyle.DashLine)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-
             painter.setPen(pen)
             painter.drawRect(relative_rect)
 
@@ -109,17 +120,15 @@ class ScreenshotOverlay(QWidget):
             if rect.contains(pos):
                 current_hover = i
                 break
-
         if current_hover != self.hover_monitor_index:
             self.hover_monitor_index = current_hover
             self.update()
 
     def mousePressEvent(self, event):
         pos = event.globalPosition().toPoint()
-        for i, rect in enumerate(self.monitor_rects):
+        for rect in self.monitor_rects:
             if rect.contains(pos):
-                # mss numbers monitors starting from 1 (monitor 0 is all screens)
-                self.selected_monitor_number = i + 1
+                self.selected_monitor_geometry = rect
                 self.accept()
                 return
 
@@ -129,7 +138,6 @@ class ScreenshotOverlay(QWidget):
 
     def exec(self):
         self.show()
-        # Custom event loop to make it modal
         self.accepted = False
         self.rejected = False
         while not self.accepted and not self.rejected:
