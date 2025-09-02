@@ -1,3 +1,5 @@
 /vendor/maia2/maia2_models/
 /temp/
 __pycache__/
+*.pyc
+*.pyo
