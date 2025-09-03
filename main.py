@@ -27,7 +27,6 @@ def main():
     if SPLASH_IMAGE_PATH.exists():
         splash_pix = QPixmap(str(SPLASH_IMAGE_PATH))
 
-        # --- SOLUTION: Scale splash screen if it's too big ---
         screen_size = app.primaryScreen().size()
         max_height = int(screen_size.height() * 0.6)
         max_width = int(screen_size.width() * 0.6)
@@ -39,7 +38,6 @@ def main():
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
-        # --- END SOLUTION ---
 
         splash = QSplashScreen(splash_pix, Qt.WindowType.WindowStaysOnTopHint)
         splash.setMask(splash_pix.mask())

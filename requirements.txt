@@ -19,6 +19,12 @@ mss
 Pillow
 pyclipper
 matplotlib
+requests
+keras-nightly
+scipy
+ultralytics
+tensorflow
+tensorflow_hub
 
 # Utilities
 pyyaml
