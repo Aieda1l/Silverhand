@@ -38,13 +38,18 @@ class ScreenshotManager:
         Args:
             geometry (QRect): The geometry of the monitor to capture.
         """
+        screen = QGuiApplication.screenAt(geometry.topLeft())
+        if not screen:
+            screen = QGuiApplication.primaryScreen()  # Fallback to primary
+
+        device_pixel_ratio = screen.devicePixelRatio()
+
         with mss.mss() as sct:
-            # Define the capture region based on the monitor's geometry
             monitor_details = {
-                "top": geometry.top(),
-                "left": geometry.left(),
-                "width": geometry.width(),
-                "height": geometry.height(),
+                "top": int(geometry.top() * device_pixel_ratio),
+                "left": int(geometry.left() * device_pixel_ratio),
+                "width": int(geometry.width() * device_pixel_ratio),
+                "height": int(geometry.height() * device_pixel_ratio),
             }
             sct_img = sct.grab(monitor_details)
             mss.tools.to_png(sct_img.rgb, sct_img.size, output=self.output_path)

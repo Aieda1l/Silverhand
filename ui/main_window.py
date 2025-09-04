@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QSlider, QFrame, QApplication, QSizePolicy, QCheckBox, QComboBox
 )
-from PyQt6.QtGui import QPixmap, QColor, QFont, QIcon
+from PyQt6.QtGui import QPixmap, QColor, QFont, QIcon, QGuiApplication
 from PyQt6.QtCore import Qt, QSize, QTimer, QRect
 
 from config import (
@@ -228,22 +228,43 @@ class MainWindow(QMainWindow):
 
     def on_ocr_finished(self, bbox, fen, cropped_image_path):
         if bbox:
+            # Find the screen where the board was detected to get its scaling factor
+            screen = QGuiApplication.screenAt(self.monitored_screen_geometry.topLeft())
+            if not screen:
+                screen = QGuiApplication.primaryScreen()
+
+            device_pixel_ratio = screen.devicePixelRatio()
+
+            # The OCR bbox is in physical pixels, relative to the screenshot's top-left corner.
+            # The monitored_screen_geometry is in logical pixels.
+            # We must scale the bbox DOWN to logical pixels before positioning it.
+
+            # Bbox is a list [x1, y1, x2, y2] in physical pixels
+            logical_x1 = int(bbox[0] / device_pixel_ratio)
+            logical_y1 = int(bbox[1] / device_pixel_ratio)
+            logical_x2 = int(bbox[2] / device_pixel_ratio)
+            logical_y2 = int(bbox[3] / device_pixel_ratio)
+
+            # The final bounding box for the overlay needs to be in global logical coordinates.
             monitor_x = self.monitored_screen_geometry.x()
             monitor_y = self.monitored_screen_geometry.y()
 
             self.board_bbox_on_screen = QRect(
-                monitor_x + bbox[0],
-                monitor_y + bbox[1],
-                bbox[2] - bbox[0],
-                bbox[3] - bbox[1]
+                monitor_x + logical_x1,
+                monitor_y + logical_y1,
+                logical_x2 - logical_x1,
+                logical_y2 - logical_y1
             )
         else:
+            # No board detected, clear the bounding box
             self.board_bbox_on_screen = None
             if self.draw_on_screen_toggle.isChecked():
                 self.draw_on_screen_toggle.setChecked(False)
 
         if fen == self.current_fen:
             self.update_status("Board state is unchanged.", timeout=2000)
+            if self.draw_on_screen_toggle.isChecked():
+                self.screen_overlay.update_drawing_data(self.board_bbox_on_screen, self.board_widget._highlights)
             return
 
         self.clear_analysis_results()
